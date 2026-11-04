@@ -69,6 +69,16 @@ For example, if you want to test ViT-based CLIP-ReID for MSMT17
 CUDA_VISIBLE_DEVICES=0 python test_clipreid.py --config_file configs/person/vit_clipreid.yml TEST.WEIGHT 'your_trained_checkpoints_path/ViT-B-16_60.pth'
 ```
 
+With `TEST.ATTENTION.ENABLED: True`, evaluation saves each image's final-layer visual attention as an 8-bit grayscale PNG under `datasets/attention_maps/<dataset>/<model>/<checkpoint>/occlusion_<percent>/maps/`. When occlusion testing is enabled, the corresponding original, patched input, and patch/attention overlay are also saved in that condition's folder. The CNN model uses its visual attention-pooling weights; ViT uses the final block's CLS-to-patch attention.
+
+After testing, create the next random, non-repeating tenth of original-image overlays with:
+
+```
+python create_attention_overlays.py --config_file configs/person/vit_clipreid.yml --ratio 0.2 --weight 'your_trained_checkpoints_path/ViT-B-16_60.pth'
+```
+
+Set `--ratio` to a condition that was tested. The script persists progress beside the maps and stops after all ten parts have been processed. `TEST.ATTENTION.MAP_DIR`, `TEST.ATTENTION.MAP_SIZE`, and `TEST.ATTENTION.OVERLAY_ALPHA` control the output directory, grayscale map resolution, and overlay strength.
+
 ### Acknowledgement
 
 Codebase from [TransReID](https://github.com/damo-cv/TransReID), [CLIP](https://github.com/openai/CLIP), and [CoOp](https://github.com/KaiyangZhou/CoOp).
@@ -100,4 +110,3 @@ If you use this code for your research, please cite
   year={2022}
 }
 ```
-

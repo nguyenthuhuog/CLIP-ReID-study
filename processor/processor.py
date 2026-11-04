@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from utils.meter import AverageMeter
 from utils.metrics import R1_mAP_eval
+from utils.attention_maps import save_attention_batch
 from torch.cuda import amp
 import torch.distributed as dist
 
@@ -166,7 +167,8 @@ def do_train(cfg,
 def do_inference(cfg,
                  model,
                  val_loader,
-                 num_query):
+                 num_query,
+                 occlusion_ratio=0.0):
     device = "cuda"
     logger = logging.getLogger("transreid.test")
     logger.info("Enter inferencing")
@@ -175,14 +177,21 @@ def do_inference(cfg,
 
     evaluator.reset()
 
+    attention_enabled = cfg.TEST.ATTENTION.ENABLED
     if device:
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() > 1 and not attention_enabled:
             print('Using {} GPUs for inference'.format(torch.cuda.device_count()))
             model = nn.DataParallel(model)
+        elif torch.cuda.device_count() > 1:
+            logger.info("Attention-map capture is enabled; using one GPU.")
         model.to(device)
 
     model.eval()
     img_path_list = []
+    inference_model = model.module if isinstance(model, nn.DataParallel) else model
+    image_encoder = inference_model.image_encoder
+    if attention_enabled:
+        image_encoder.set_attention_capture(True)
 
     for n_iter, (img, pid, camid, camids, target_view, imgpath) in enumerate(val_loader):
         with torch.no_grad():
@@ -198,7 +207,16 @@ def do_inference(cfg,
             feat = model(img, cam_label=camids, view_label=target_view)
             evaluator.update((feat, pid, camid))
             img_path_list.extend(imgpath)
+            if attention_enabled:
+                attention_maps = image_encoder.get_attention_map()
+                if attention_maps is None:
+                    raise RuntimeError("The image encoder did not produce an attention map.")
+                save_attention_batch(
+                    cfg, imgpath, img, attention_maps, occlusion_ratio
+                )
 
+    if attention_enabled:
+        image_encoder.set_attention_capture(False)
 
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     logger.info("Validation Results ")

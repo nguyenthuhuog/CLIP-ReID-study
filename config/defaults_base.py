@@ -193,6 +193,11 @@ _C.TEST.EVAL = False
 _C.TEST.OCCLUSION = CN()
 _C.TEST.OCCLUSION.ENABLED = False
 _C.TEST.OCCLUSION.RATIOS = [0.0, 0.2, 0.4, 0.6]
+_C.TEST.ATTENTION = CN()
+_C.TEST.ATTENTION.ENABLED = False
+_C.TEST.ATTENTION.MAP_DIR = "./datasets/attention_maps"
+_C.TEST.ATTENTION.MAP_SIZE = [16, 8]
+_C.TEST.ATTENTION.OVERLAY_ALPHA = 0.45
 # ---------------------------------------------------------------------------- #
 # Misc options
 # ---------------------------------------------------------------------------- #

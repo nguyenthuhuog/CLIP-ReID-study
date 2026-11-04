@@ -51,9 +51,9 @@ if __name__ == "__main__":
                 cfg.INPUT.SIZE_TEST,
                 cfg.INPUT.PIXEL_MEAN,
                 cfg.INPUT.PIXEL_STD,
-                ratio,
+                ratio if ratio > 0 else None,
             )
-            do_inference(cfg, model, val_loader, num_query)
+            do_inference(cfg, model, val_loader, num_query, ratio)
     elif cfg.DATASETS.NAMES == 'VehicleID':
         for trial in range(10):
             train_loader, train_loader_normal, val_loader, num_query, num_classes, camera_num, view_num = make_dataloader(cfg)
@@ -77,4 +77,3 @@ if __name__ == "__main__":
                  model,
                  val_loader,
                  num_query)
-

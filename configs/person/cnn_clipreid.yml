@@ -66,6 +66,11 @@ TEST:
   OCCLUSION:
     ENABLED: False
     RATIOS: [0.0, 0.2, 0.4, 0.6]
+  ATTENTION:
+    ENABLED: True
+    MAP_DIR: './datasets/attention_maps'
+    MAP_SIZE: [16, 8]
+    OVERLAY_ALPHA: 0.45
 
 DATASETS:
   NAMES: ('market1501')

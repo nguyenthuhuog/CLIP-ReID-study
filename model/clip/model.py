@@ -62,12 +62,16 @@ class AttentionPool2d(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.c_proj = nn.Linear(embed_dim, output_dim or embed_dim) 
         self.num_heads = num_heads
+        self.capture_attention = False
+        self.last_attention = None
+        self.last_grid_size = None
 
     def forward(self, x): 
+        self.last_grid_size = x.shape[-2:]
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]).permute(2, 0, 1)  # NCHW -> (HW)NC  #32,2048,7,7 ->49, 32, 2048
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (HW+1)NC  50,32,2048
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (HW+1)NC
-        x, _ = F.multi_head_attention_forward(
+        x, attention = F.multi_head_attention_forward(
             query=x, key=x, value=x,
             embed_dim_to_check=x.shape[-1],
             num_heads=self.num_heads,
@@ -84,10 +88,22 @@ class AttentionPool2d(nn.Module):
             out_proj_bias=self.c_proj.bias,
             use_separate_proj_weight=True,
             training=self.training,
-            need_weights=False
+            need_weights=self.capture_attention,
+            average_attn_weights=False
         ) 
+        self.last_attention = attention.detach() if self.capture_attention else None
 
         return x 
+
+    def get_attention_map(self):
+        if self.last_attention is None or self.last_grid_size is None:
+            return None
+        height, width = self.last_grid_size
+        attention = self.last_attention.mean(dim=1)[:, 0, 1:]
+        attention = attention.reshape(attention.shape[0], height, width)
+        minimum = attention.amin(dim=(1, 2), keepdim=True)
+        maximum = attention.amax(dim=(1, 2), keepdim=True)
+        return (attention - minimum) / (maximum - minimum).clamp_min(1e-12)
 
 class ModifiedResNet(nn.Module):
     """
@@ -120,6 +136,14 @@ class ModifiedResNet(nn.Module):
         self.layer4 = self._make_layer(width * 8, layers[3], stride=1) 
         embed_dim = width * 32  # the ResNet feature dimension
         self.attnpool = AttentionPool2d(input_resolution, embed_dim, heads, output_dim)
+
+    def set_attention_capture(self, enabled):
+        self.attnpool.capture_attention = enabled
+        if not enabled:
+            self.attnpool.last_attention = None
+
+    def get_attention_map(self):
+        return self.attnpool.get_attention_map()
 
     def _make_layer(self, planes, blocks, stride=1):
         layers = [Bottleneck(self._inplanes, planes, stride)]
@@ -175,10 +199,21 @@ class ResidualAttentionBlock(nn.Module):
         ]))
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
+        self.capture_attention = False
+        self.last_attention = None
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+        output, attention = self.attn(
+            x,
+            x,
+            x,
+            need_weights=self.capture_attention,
+            average_attn_weights=False,
+            attn_mask=self.attn_mask,
+        )
+        self.last_attention = attention.detach() if self.capture_attention else None
+        return output
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
@@ -211,6 +246,7 @@ class VisionTransformer(nn.Module):
         self.ln_pre = LayerNorm(width)
 
         self.transformer = Transformer(width, layers, heads)
+        self.capture_attention = False
 
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
@@ -238,6 +274,24 @@ class VisionTransformer(nn.Module):
             xproj = x12 @ self.proj   
 
         return x11, x12, xproj
+
+    def set_attention_capture(self, enabled):
+        self.capture_attention = enabled
+        last_block = self.transformer.resblocks[-1]
+        last_block.capture_attention = enabled
+        if not enabled:
+            last_block.last_attention = None
+
+    def get_attention_map(self):
+        attention = self.transformer.resblocks[-1].last_attention
+        if attention is None:
+            return None
+        height, width = self.h_resolution, self.w_resolution
+        attention = attention.mean(dim=1)[:, 0, 1:]
+        attention = attention.reshape(attention.shape[0], height, width)
+        minimum = attention.amin(dim=(1, 2), keepdim=True)
+        maximum = attention.amax(dim=(1, 2), keepdim=True)
+        return (attention - minimum) / (maximum - minimum).clamp_min(1e-12)
 
 
 class CLIP(nn.Module):
