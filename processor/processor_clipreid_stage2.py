@@ -90,6 +90,7 @@ def do_train_stage2(cfg,
             num_classes = model.module.num_classes
         else:
             num_classes = model.num_classes
+        torch.cuda.reset_peak_memory_stats(local_rank)
 
     loss_meter = AverageMeter()
     acc_meter = AverageMeter()
@@ -263,6 +264,11 @@ def do_train_stage2(cfg,
     all_end_time = time.monotonic()
     total_time = timedelta(seconds=all_end_time - all_start_time)
     logger.info("Total running time: {}".format(total_time))
+    logger.info(
+        "Stage2 peak GPU memory allocated: {:.2f} MB".format(
+            torch.cuda.max_memory_allocated(local_rank) / (1024 ** 2)
+        )
+    )
     print(cfg.OUTPUT_DIR)
 
 def do_inference(cfg,

@@ -28,6 +28,7 @@ def do_train_stage1(cfg,
         if torch.cuda.device_count() > 1:
             print('Using {} GPUs for training'.format(torch.cuda.device_count()))
             model = nn.DataParallel(model)  
+        torch.cuda.reset_peak_memory_stats(local_rank)
 
     loss_meter = AverageMeter()
     scaler = amp.GradScaler()
@@ -104,3 +105,8 @@ def do_train_stage1(cfg,
     all_end_time = time.monotonic()
     total_time = timedelta(seconds=all_end_time - all_start_time)
     logger.info("Stage1 running time: {}".format(total_time))
+    logger.info(
+        "Stage1 peak GPU memory allocated: {:.2f} MB".format(
+            torch.cuda.max_memory_allocated(local_rank) / (1024 ** 2)
+        )
+    )

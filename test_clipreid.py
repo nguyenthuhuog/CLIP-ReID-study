@@ -1,6 +1,9 @@
 import os
 from config import cfg
+import random
 import argparse
+import numpy as np
+import torch
 from datasets.make_dataloader_clipreid import make_dataloader
 from datasets.preprocessing import build_test_transform
 from model.make_model_clipreid import make_model
@@ -22,6 +25,11 @@ if __name__ == "__main__":
         cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
+
+    random.seed(cfg.SOLVER.SEED)
+    np.random.seed(cfg.SOLVER.SEED)
+    torch.manual_seed(cfg.SOLVER.SEED)
+    torch.cuda.manual_seed_all(cfg.SOLVER.SEED)
 
     output_dir = cfg.OUTPUT_DIR
     if output_dir and not os.path.exists(output_dir):
@@ -45,7 +53,28 @@ if __name__ == "__main__":
     model.load_param(cfg.TEST.WEIGHT)
 
     if cfg.TEST.OCCLUSION.ENABLED:
+        logger.info("Evaluation condition: baseline; occlusion_ratio=0")
+        val_loader.dataset.transform = build_test_transform(
+            cfg.INPUT.SIZE_TEST,
+            cfg.INPUT.PIXEL_MEAN,
+            cfg.INPUT.PIXEL_STD,
+        )
+        do_inference(cfg, model, val_loader, num_query, 0.0)
+
         for ratio in cfg.TEST.OCCLUSION.RATIOS:
+            if not 0 < ratio <= 1:
+                raise ValueError(
+                    "Occlusion ratios must be greater than 0 and at most 1."
+                )
+            random.seed(cfg.SOLVER.SEED)
+            np.random.seed(cfg.SOLVER.SEED)
+            torch.manual_seed(cfg.SOLVER.SEED)
+            torch.cuda.manual_seed_all(cfg.SOLVER.SEED)
+            logger.info(
+                "Evaluation condition: random_patch; occlusion_ratio={}".format(
+                    ratio
+                )
+            )
             logger.info("Testing with random patch occlusion: %.0f%%", ratio * 100)
             val_loader.dataset.transform = build_test_transform(
                 cfg.INPUT.SIZE_TEST,

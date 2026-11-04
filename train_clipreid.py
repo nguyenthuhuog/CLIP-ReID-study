@@ -98,3 +98,9 @@ if __name__ == '__main__':
         loss_func,
         num_query, args.local_rank
     )
+
+    final_checkpoint = os.path.join(
+        cfg.OUTPUT_DIR, cfg.MODEL.NAME + "_final.pth"
+    )
+    torch.save(model.state_dict(), final_checkpoint)
+    logger.info("Saved final model checkpoint to {}".format(final_checkpoint))
