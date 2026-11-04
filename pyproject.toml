@@ -1,0 +1,27 @@
+[project]
+name = "clipreid"
+version = "0.1.0"
+description = "CLIP-ReID environment configured with PyTorch and CUDA 12.x"
+readme = "README.md"
+requires-python = "==3.8.*"
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision",
+    "torchaudio",
+    "yacs",
+    "timm",
+    "scikit-image",
+    "tqdm",
+    "ftfy",
+    "regex",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
