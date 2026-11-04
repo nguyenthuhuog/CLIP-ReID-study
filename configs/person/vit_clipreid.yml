@@ -72,6 +72,10 @@ DATASETS:
   ROOT_DIR: ('./datasets/data')
 OUTPUT_DIR: './model/output'
 
+I2T_TOPK:
+  ENABLED: True
+  NUMBER_K: 64
+
 #   NAMES: ('dukemtmc')
 #   ROOT_DIR: ('')
 # OUTPUT_DIR: ''
