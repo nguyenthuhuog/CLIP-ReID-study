@@ -78,6 +78,11 @@ I2T_RANDOM_POOL:
   # Additional random negative identities per batch; batch identities are included too.
   NUM_NEGATIVES: 256
 
+I2T_RANDOM_K:
+  # Disable I2T_TOPK when enabling Random-K.
+  ENABLED: False
+  NUMBER_K: 64
+
 #   NAMES: ('dukemtmc')
 #   ROOT_DIR: ('')
 # OUTPUT_DIR: ''

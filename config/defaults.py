@@ -17,6 +17,9 @@ _C.I2T_TOPK.NUMBER_K = 64
 _C.I2T_RANDOM_POOL = CN()
 _C.I2T_RANDOM_POOL.ENABLED = False
 _C.I2T_RANDOM_POOL.NUM_NEGATIVES = 256
+_C.I2T_RANDOM_K = CN()
+_C.I2T_RANDOM_K.ENABLED = False
+_C.I2T_RANDOM_K.NUMBER_K = 64
 # -----------------------------------------------------------------------------
 # MODEL
 # -----------------------------------------------------------------------------

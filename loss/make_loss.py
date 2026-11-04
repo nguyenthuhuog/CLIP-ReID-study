@@ -33,10 +33,14 @@ def _label_smoothed_i2t_loss(logits, targets, epsilon):
 
 def make_loss(cfg, num_classes):    # modified by gu
     sampler = cfg.DATALOADER.SAMPLER
-    feat_dim = 2048
-    center_criterion = CenterLoss(num_classes=num_classes, feat_dim=feat_dim, use_gpu=True)  # center loss
     topk_i2t_enabled = cfg.I2T_TOPK.ENABLED
     random_pool_i2t_enabled = cfg.I2T_RANDOM_POOL.ENABLED
+    random_k_i2t_enabled = cfg.I2T_RANDOM_K.ENABLED
+    if random_k_i2t_enabled and topk_i2t_enabled:
+        raise ValueError("Enable either I2T_TOPK or I2T_RANDOM_K, not both")
+    if random_k_i2t_enabled and random_pool_i2t_enabled:
+        raise ValueError("I2T_RANDOM_K and I2T_RANDOM_POOL cannot both be enabled")
+
     if random_pool_i2t_enabled:
         if cfg.I2T_RANDOM_POOL.NUM_NEGATIVES < 1:
             raise ValueError("I2T_RANDOM_POOL.NUM_NEGATIVES must be at least 1")
@@ -48,6 +52,14 @@ def make_loss(cfg, num_classes):    # modified by gu
             )
         )
 
+    if random_k_i2t_enabled:
+        if cfg.I2T_RANDOM_K.NUMBER_K < 1:
+            raise ValueError("I2T_RANDOM_K.NUMBER_K must be at least 1")
+        if num_classes < 2:
+            raise ValueError("Random-K I2T loss requires at least two classes")
+        random_k_i2t_k = min(cfg.I2T_RANDOM_K.NUMBER_K, num_classes - 1)
+        print("using {} random negative classes for I2T loss".format(random_k_i2t_k))
+
     if topk_i2t_enabled:
         if cfg.I2T_TOPK.NUMBER_K < 1:
             raise ValueError("I2T_TOPK.NUMBER_K must be at least 1")
@@ -55,6 +67,9 @@ def make_loss(cfg, num_classes):    # modified by gu
             raise ValueError("Top-K I2T loss requires at least two classes")
         topk_i2t_k = min(cfg.I2T_TOPK.NUMBER_K, num_classes - 1)
         print("using top-{} negative logits for I2T loss".format(topk_i2t_k))
+
+    feat_dim = 2048
+    center_criterion = CenterLoss(num_classes=num_classes, feat_dim=feat_dim, use_gpu=True)  # center loss
 
     if 'triplet' in cfg.MODEL.METRIC_LOSS_TYPE:
         if cfg.MODEL.NO_MARGIN:
@@ -101,7 +116,7 @@ def make_loss(cfg, num_classes):    # modified by gu
                             I2TLOSS = _topk_i2t_loss(
                                 i2tscore, i2t_target, topk_i2t_k, xent.epsilon
                             )
-                        elif random_pool_i2t_enabled:
+                        elif random_pool_i2t_enabled or random_k_i2t_enabled:
                             I2TLOSS = _label_smoothed_i2t_loss(
                                 i2tscore, i2t_target, xent.epsilon
                             )

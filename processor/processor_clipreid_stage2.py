@@ -32,6 +32,34 @@ def _random_pool_i2t_logits(
     return logits, target_indices, candidate_ids
 
 
+def _random_k_i2t_logits(
+    image_features, text_features, targets, num_classes, num_negatives
+):
+    num_negatives = min(num_negatives, num_classes - 1)
+    class_permutation = torch.randperm(num_classes, device=targets.device)
+    class_positions = torch.empty_like(class_permutation)
+    class_positions[class_permutation] = torch.arange(
+        num_classes, device=targets.device
+    )
+
+    offsets = torch.arange(num_negatives, device=targets.device)
+    negative_positions = (
+        class_positions[targets].unsqueeze(1) + 1 + offsets
+    ) % num_classes
+    negative_ids = class_permutation[negative_positions]
+
+    positive_features = text_features[targets]
+    negative_features = text_features[negative_ids]
+    positive_logits = (image_features * positive_features).sum(dim=1, keepdim=True)
+    negative_logits = torch.einsum(
+        "bd,bkd->bk", image_features, negative_features
+    )
+    logits = torch.cat((positive_logits, negative_logits), dim=1)
+    candidate_ids = torch.cat((targets.unsqueeze(1), negative_ids), dim=1)
+    target_indices = torch.zeros_like(targets)
+    return logits, target_indices, candidate_ids
+
+
 def do_train_stage2(cfg,
              model,
              center_criterion,
@@ -116,7 +144,15 @@ def do_train_stage2(cfg,
                 target_view = None
             with amp.autocast(enabled=True):
                 score, feat, image_features = model(x = img, label = target, cam_label=target_cam, view_label=target_view)
-                if cfg.I2T_RANDOM_POOL.ENABLED:
+                if cfg.I2T_RANDOM_K.ENABLED:
+                    logits, i2t_target, candidate_ids = _random_k_i2t_logits(
+                        image_features,
+                        text_features,
+                        target,
+                        num_classes,
+                        cfg.I2T_RANDOM_K.NUMBER_K,
+                    )
+                elif cfg.I2T_RANDOM_POOL.ENABLED:
                     logits, i2t_target, candidate_ids = _random_pool_i2t_logits(
                         image_features,
                         text_features,
@@ -143,7 +179,13 @@ def do_train_stage2(cfg,
                 scaler.step(optimizer_center)
                 scaler.update()
 
-            predicted_ids = candidate_ids[logits.max(1)[1]]
+            predicted_indices = logits.max(1)[1]
+            if candidate_ids.ndim == 1:
+                predicted_ids = candidate_ids[predicted_indices]
+            else:
+                predicted_ids = candidate_ids.gather(
+                    1, predicted_indices.unsqueeze(1)
+                ).squeeze(1)
             acc = (predicted_ids == target).float().mean()
 
             loss_meter.update(loss.item(), img.shape[0])
