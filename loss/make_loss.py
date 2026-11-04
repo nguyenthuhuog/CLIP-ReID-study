@@ -14,16 +14,19 @@ from .center_loss import CenterLoss
 def _topk_i2t_loss(logits, targets, k, epsilon):
     negative_logits = logits.clone()
     negative_logits.scatter_(1, targets.unsqueeze(1), float("-inf"))
+    k = min(k, logits.size(1) - 1)
     topk_negative_logits = negative_logits.topk(k, dim=1).values
     positive_logits = logits.gather(1, targets.unsqueeze(1))
     candidate_logits = torch.cat((positive_logits, topk_negative_logits), dim=1)
 
-    if epsilon == 0:
-        candidate_targets = torch.zeros_like(targets)
-        return F.cross_entropy(candidate_logits, candidate_targets)
+    return _label_smoothed_i2t_loss(
+        candidate_logits, torch.zeros_like(targets), epsilon
+    )
 
-    log_probs = F.log_softmax(candidate_logits, dim=1)
-    nll_loss = -log_probs[:, 0]
+
+def _label_smoothed_i2t_loss(logits, targets, epsilon):
+    log_probs = F.log_softmax(logits, dim=1)
+    nll_loss = -log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
     smooth_loss = -log_probs.mean(dim=1)
     return ((1 - epsilon) * nll_loss + epsilon * smooth_loss).mean()
 
@@ -33,6 +36,18 @@ def make_loss(cfg, num_classes):    # modified by gu
     feat_dim = 2048
     center_criterion = CenterLoss(num_classes=num_classes, feat_dim=feat_dim, use_gpu=True)  # center loss
     topk_i2t_enabled = cfg.I2T_TOPK.ENABLED
+    random_pool_i2t_enabled = cfg.I2T_RANDOM_POOL.ENABLED
+    if random_pool_i2t_enabled:
+        if cfg.I2T_RANDOM_POOL.NUM_NEGATIVES < 1:
+            raise ValueError("I2T_RANDOM_POOL.NUM_NEGATIVES must be at least 1")
+        if num_classes < 2:
+            raise ValueError("Random-pool I2T loss requires at least two classes")
+        print(
+            "using a random pool of up to {} negative classes for I2T loss".format(
+                cfg.I2T_RANDOM_POOL.NUM_NEGATIVES
+            )
+        )
+
     if topk_i2t_enabled:
         if cfg.I2T_TOPK.NUMBER_K < 1:
             raise ValueError("I2T_TOPK.NUMBER_K must be at least 1")
@@ -61,7 +76,9 @@ def make_loss(cfg, num_classes):    # modified by gu
             return F.cross_entropy(score, target)
 
     elif cfg.DATALOADER.SAMPLER == 'softmax_triplet':
-        def loss_func(score, feat, target, target_cam, i2tscore = None):
+        def loss_func(
+            score, feat, target, target_cam, i2tscore=None, i2t_target=None
+        ):
             if cfg.MODEL.METRIC_LOSS_TYPE == 'triplet':
                 if cfg.MODEL.IF_LABELSMOOTH == 'on':
                     if isinstance(score, list):
@@ -79,9 +96,14 @@ def make_loss(cfg, num_classes):    # modified by gu
                     loss = cfg.MODEL.ID_LOSS_WEIGHT * ID_LOSS + cfg.MODEL.TRIPLET_LOSS_WEIGHT * TRI_LOSS
 
                     if i2tscore is not None:
+                        i2t_target = target if i2t_target is None else i2t_target
                         if topk_i2t_enabled:
                             I2TLOSS = _topk_i2t_loss(
-                                i2tscore, target, topk_i2t_k, xent.epsilon
+                                i2tscore, i2t_target, topk_i2t_k, xent.epsilon
+                            )
+                        elif random_pool_i2t_enabled:
+                            I2TLOSS = _label_smoothed_i2t_loss(
+                                i2tscore, i2t_target, xent.epsilon
                             )
                         else:
                             I2TLOSS = xent(i2tscore, target)
@@ -104,10 +126,13 @@ def make_loss(cfg, num_classes):    # modified by gu
                     loss = cfg.MODEL.ID_LOSS_WEIGHT * ID_LOSS + cfg.MODEL.TRIPLET_LOSS_WEIGHT * TRI_LOSS
                     
                     if i2tscore is not None:
+                        i2t_target = target if i2t_target is None else i2t_target
                         if topk_i2t_enabled:
-                            I2TLOSS = _topk_i2t_loss(i2tscore, target, topk_i2t_k, 0)
+                            I2TLOSS = _topk_i2t_loss(
+                                i2tscore, i2t_target, topk_i2t_k, 0
+                            )
                         else:
-                            I2TLOSS = F.cross_entropy(i2tscore, target)
+                            I2TLOSS = F.cross_entropy(i2tscore, i2t_target)
                         loss = cfg.MODEL.I2T_LOSS_WEIGHT * I2TLOSS + loss
 
 

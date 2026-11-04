@@ -10,6 +10,28 @@ import torch.distributed as dist
 from torch.nn import functional as F
 from loss.supcontrast import SupConLoss
 
+
+def _random_pool_i2t_logits(
+    image_features, text_features, targets, num_classes, num_negatives
+):
+    positive_ids = torch.unique(targets, sorted=True)
+    negative_mask = torch.ones(
+        num_classes, dtype=torch.bool, device=targets.device
+    )
+    negative_mask[positive_ids] = False
+    negative_ids = torch.arange(num_classes, device=targets.device)[negative_mask]
+
+    sample_count = min(num_negatives, negative_ids.numel())
+    if sample_count:
+        permutation = torch.randperm(negative_ids.numel(), device=targets.device)
+        negative_ids = negative_ids[permutation[:sample_count]]
+
+    candidate_ids = torch.cat((positive_ids, negative_ids))
+    logits = image_features @ text_features[candidate_ids].t()
+    target_indices = torch.searchsorted(positive_ids, targets)
+    return logits, target_indices, candidate_ids
+
+
 def do_train_stage2(cfg,
              model,
              center_criterion,
@@ -94,8 +116,21 @@ def do_train_stage2(cfg,
                 target_view = None
             with amp.autocast(enabled=True):
                 score, feat, image_features = model(x = img, label = target, cam_label=target_cam, view_label=target_view)
-                logits = image_features @ text_features.t()
-                loss = loss_fn(score, feat, target, target_cam, logits)
+                if cfg.I2T_RANDOM_POOL.ENABLED:
+                    logits, i2t_target, candidate_ids = _random_pool_i2t_logits(
+                        image_features,
+                        text_features,
+                        target,
+                        num_classes,
+                        cfg.I2T_RANDOM_POOL.NUM_NEGATIVES,
+                    )
+                else:
+                    logits = image_features @ text_features.t()
+                    i2t_target = target
+                    candidate_ids = torch.arange(num_classes, device=target.device)
+                loss = loss_fn(
+                    score, feat, target, target_cam, logits, i2t_target
+                )
 
             scaler.scale(loss).backward()
 
@@ -108,7 +143,8 @@ def do_train_stage2(cfg,
                 scaler.step(optimizer_center)
                 scaler.update()
 
-            acc = (logits.max(1)[1] == target).float().mean()
+            predicted_ids = candidate_ids[logits.max(1)[1]]
+            acc = (predicted_ids == target).float().mean()
 
             loss_meter.update(loss.item(), img.shape[0])
             acc_meter.update(acc, 1)
