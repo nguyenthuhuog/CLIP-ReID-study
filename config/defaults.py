@@ -239,6 +239,9 @@ _C.TEST.FEAT_NORM = 'yes'
 _C.TEST.DIST_MAT = "dist_mat.npy"
 # Whether calculate the eval score option: 'True', 'False'
 _C.TEST.EVAL = False
+_C.TEST.OCCLUSION = CN()
+_C.TEST.OCCLUSION.ENABLED = False
+_C.TEST.OCCLUSION.RATIOS = [0.0, 0.2, 0.4, 0.6]
 # ---------------------------------------------------------------------------- #
 # Misc options
 # ---------------------------------------------------------------------------- #

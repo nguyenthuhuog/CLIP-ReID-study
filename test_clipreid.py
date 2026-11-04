@@ -2,6 +2,7 @@ import os
 from config import cfg
 import argparse
 from datasets.make_dataloader_clipreid import make_dataloader
+from datasets.preprocessing import build_test_transform
 from model.make_model_clipreid import make_model
 from processor.processor_clipreid_stage2 import do_inference
 from utils.logger import setup_logger
@@ -43,7 +44,17 @@ if __name__ == "__main__":
     model = make_model(cfg, num_class=num_classes, camera_num=camera_num, view_num = view_num)
     model.load_param(cfg.TEST.WEIGHT)
 
-    if cfg.DATASETS.NAMES == 'VehicleID':
+    if cfg.TEST.OCCLUSION.ENABLED:
+        for ratio in cfg.TEST.OCCLUSION.RATIOS:
+            logger.info("Testing with random patch occlusion: %.0f%%", ratio * 100)
+            val_loader.dataset.transform = build_test_transform(
+                cfg.INPUT.SIZE_TEST,
+                cfg.INPUT.PIXEL_MEAN,
+                cfg.INPUT.PIXEL_STD,
+                ratio,
+            )
+            do_inference(cfg, model, val_loader, num_query)
+    elif cfg.DATASETS.NAMES == 'VehicleID':
         for trial in range(10):
             train_loader, train_loader_normal, val_loader, num_query, num_classes, camera_num, view_num = make_dataloader(cfg)
             rank_1, rank5, mAP = do_inference(cfg,
@@ -66,5 +77,4 @@ if __name__ == "__main__":
                  model,
                  val_loader,
                  num_query)
-
 

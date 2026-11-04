@@ -3,6 +3,7 @@ import torchvision.transforms as T
 from torch.utils.data import DataLoader
 
 from .bases import ImageDataset
+from .preprocessing import build_test_transform
 from timm.data.random_erasing import RandomErasing
 from .sampler import RandomIdentitySampler
 from .dukemtmcreid import DukeMTMCreID
@@ -51,11 +52,9 @@ def make_dataloader(cfg):
             # RandomErasing(probability=cfg.INPUT.RE_PROB, mean=cfg.INPUT.PIXEL_MEAN)
         ])
 
-    val_transforms = T.Compose([
-        T.Resize(cfg.INPUT.SIZE_TEST),
-        T.ToTensor(),
-        T.Normalize(mean=cfg.INPUT.PIXEL_MEAN, std=cfg.INPUT.PIXEL_STD)
-    ])
+    val_transforms = build_test_transform(
+        cfg.INPUT.SIZE_TEST, cfg.INPUT.PIXEL_MEAN, cfg.INPUT.PIXEL_STD
+    )
 
     num_workers = cfg.DATALOADER.NUM_WORKERS
 

@@ -5,12 +5,14 @@ description = "CLIP-ReID environment configured with PyTorch and CUDA 12.x"
 readme = "README.md"
 requires-python = "==3.8.*"
 dependencies = [
-    "torch>=2.0.0",
-    "torchvision",
-    "torchaudio",
+    "torch==2.4.1",
+    "torchvision==0.19.1",
+    "torchaudio==2.4.1",
     "yacs",
     "timm",
     "scikit-image",
+    "numpy>=1.24.4,<1.25",
+    "pillow>=10.4,<11",
     "tqdm",
     "ftfy",
     "regex",

@@ -47,6 +47,8 @@ source = { virtual = "." }
 dependencies = [
     { name = "ftfy", version = "6.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8.1'" },
     { name = "ftfy", version = "6.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8.1'" },
+    { name = "numpy" },
+    { name = "pillow" },
     { name = "regex" },
     { name = "scikit-image" },
     { name = "timm" },
@@ -60,12 +62,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "ftfy" },
+    { name = "numpy", specifier = ">=1.24.4,<1.25" },
+    { name = "pillow", specifier = ">=10.4,<11" },
     { name = "regex" },
     { name = "scikit-image" },
     { name = "timm" },
-    { name = "torch", specifier = ">=2.0.0", index = "https://download.pytorch.org/whl/cu121" },
-    { name = "torchaudio", index = "https://download.pytorch.org/whl/cu121" },
-    { name = "torchvision", index = "https://download.pytorch.org/whl/cu121" },
+    { name = "torch", specifier = "==2.4.1", index = "https://download.pytorch.org/whl/cu121" },
+    { name = "torchaudio", specifier = "==2.4.1", index = "https://download.pytorch.org/whl/cu121" },
+    { name = "torchvision", specifier = "==0.19.1", index = "https://download.pytorch.org/whl/cu121" },
     { name = "tqdm" },
     { name = "yacs" },
 ]
