@@ -1,4 +1,27 @@
-*/__pycache__
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+Python
+build/
+dist/
+*.egg-info/
+eggs/
+
+# VS Code settings
+vscode/
+
+# Jupyter Notebook checkpoints
+ipynb_checkpoints/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
 .venv
 datasets/data
