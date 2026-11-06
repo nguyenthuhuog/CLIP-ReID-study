@@ -27,3 +27,4 @@ pip-delete-this-directory.txt
 datasets/data
 model/output
 logs
+outputs
