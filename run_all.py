@@ -63,9 +63,27 @@ METHODS = (
     ),
 )
 
+BASELINE_OPTS = (
+    "I2T_TOPK.ENABLED",
+    "False",
+    "I2T_RANDOM_POOL.ENABLED",
+    "False",
+    "I2T_RANDOM_K.ENABLED",
+    "False",
+)
+
 MODELS = (
     ("cnn", "configs/person/cnn_clipreid.yml"),
     ("vit", "configs/person/vit_clipreid.yml"),
+)
+
+EXPERIMENTS = tuple(
+    (model_name, config_path, "baseline", BASELINE_OPTS)
+    for model_name, config_path in MODELS
+) + tuple(
+    (model_name, config_path, method_name, method_opts)
+    for model_name, config_path in MODELS
+    for method_name, method_opts in METHODS
 )
 
 
@@ -200,91 +218,94 @@ def main():
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
 
-    for model_name, config_path in MODELS:
-        for method_name, method_opts in METHODS:
-            case_name = "{}_{}".format(model_name, method_name)
-            case_output = output_root / case_name
-            case_output.mkdir(parents=True, exist_ok=False)
-            train_log = logs_root / (case_name + "_train.log")
-            test_log = logs_root / (case_name + "_test.log")
-            model_checkpoint_name = (
-                "RN50_final.pth"
-                if model_name == "cnn"
-                else "ViT-B-16_final.pth"
-            )
-            generated_checkpoint = case_output / model_checkpoint_name
-            checkpoint = case_output / (case_name + "_final.pth")
+    for model_name, config_path, method_name, method_opts in EXPERIMENTS:
+        case_name = "{}_{}".format(model_name, method_name)
+        case_output = output_root / case_name
+        case_output.mkdir(parents=True, exist_ok=False)
+        train_log = logs_root / (case_name + "_train.log")
+        test_log = logs_root / (case_name + "_test.log")
+        model_checkpoint_name = (
+            "RN50_final.pth"
+            if model_name == "cnn"
+            else "ViT-B-16_final.pth"
+        )
+        generated_checkpoint = case_output / model_checkpoint_name
+        checkpoint = case_output / (case_name + "_final.pth")
 
-            print("[INFO] Training {} ({})".format(model_name, method_name))
-            train_command = [
-                str(PYTHON),
-                "train_clipreid.py",
-                "--config_file",
-                config_path,
-                "OUTPUT_DIR",
-                str(case_output),
-            ] + list(method_opts)
-            training_time = run_logged(train_command, train_log, env)
+        print("[INFO] Training {} ({})".format(model_name, method_name))
+        train_command = [
+            str(PYTHON),
+            "train_clipreid.py",
+            "--config_file",
+            config_path,
+            "OUTPUT_DIR",
+            str(case_output),
+        ] + list(method_opts)
+        training_time = run_logged(train_command, train_log, env)
 
-            if not generated_checkpoint.is_file():
-                raise RuntimeError(
-                    "Training completed without the expected checkpoint: {}".format(
-                        generated_checkpoint
-                    )
-                )
-            if checkpoint.exists():
-                raise FileExistsError(
-                    "Refusing to overwrite experiment checkpoint: {}".format(
-                        checkpoint
-                    )
-                )
-            generated_checkpoint.rename(checkpoint)
-            peak_memory_mb = read_peak_gpu_memory_mb(
-                case_output / "train_log.txt"
-            )
-
-            print("[INFO] Testing {} ({})".format(model_name, method_name))
-            test_command = [
-                str(PYTHON),
-                "test_clipreid.py",
-                "--config_file",
-                config_path,
-                "OUTPUT_DIR",
-                str(case_output),
-                "TEST.WEIGHT",
-                str(checkpoint),
-                "TEST.ATTENTION.ENABLED",
-                "False",
-                "TEST.OCCLUSION.ENABLED",
-                "True",
-                "TEST.OCCLUSION.RATIOS",
-                str(list(OCCLUSION_RATIOS)),
-            ]
-            run_logged(test_command, test_log, env)
-
-            test_results = read_test_metrics(case_output / "test_log.txt")
-            rows = []
-            for result in test_results:
-                rows.append(
-                    {
-                        "run_id": run_id,
-                        "experiment_name": case_name,
-                        "model": model_name,
-                        "method": method_name,
-                        **result,
-                        "total_training_time_seconds": round(training_time, 3),
-                        "peak_gpu_memory_mb": round(peak_memory_mb, 2),
-                        "checkpoint": str(checkpoint.relative_to(ROOT)),
-                    }
-                )
-            append_results(rows)
-            print(
-                "[INFO] Appended {} test results for {} to {}".format(
-                    len(rows), case_name, RESULTS_PATH
+        if not generated_checkpoint.is_file():
+            raise RuntimeError(
+                "Training completed without the expected checkpoint: {}".format(
+                    generated_checkpoint
                 )
             )
+        if checkpoint.exists():
+            raise FileExistsError(
+                "Refusing to overwrite experiment checkpoint: {}".format(
+                    checkpoint
+                )
+            )
+        generated_checkpoint.rename(checkpoint)
+        peak_memory_mb = read_peak_gpu_memory_mb(
+            case_output / "train_log.txt"
+        )
 
-    print("[INFO] All six training/testing cases completed sequentially.")
+        print("[INFO] Testing {} ({})".format(model_name, method_name))
+        test_command = [
+            str(PYTHON),
+            "test_clipreid.py",
+            "--config_file",
+            config_path,
+            "OUTPUT_DIR",
+            str(case_output),
+            "TEST.WEIGHT",
+            str(checkpoint),
+            "TEST.ATTENTION.ENABLED",
+            "False",
+            "TEST.OCCLUSION.ENABLED",
+            "True",
+            "TEST.OCCLUSION.RATIOS",
+            str(list(OCCLUSION_RATIOS)),
+        ]
+        run_logged(test_command, test_log, env)
+
+        test_results = read_test_metrics(case_output / "test_log.txt")
+        rows = []
+        for result in test_results:
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "experiment_name": case_name,
+                    "model": model_name,
+                    "method": method_name,
+                    **result,
+                    "total_training_time_seconds": round(training_time, 3),
+                    "peak_gpu_memory_mb": round(peak_memory_mb, 2),
+                    "checkpoint": str(checkpoint.relative_to(ROOT)),
+                }
+            )
+        append_results(rows)
+        print(
+            "[INFO] Appended {} test results for {} to {}".format(
+                len(rows), case_name, RESULTS_PATH
+            )
+        )
+
+    print(
+        "[INFO] All {} training/testing cases completed sequentially.".format(
+            len(EXPERIMENTS)
+        )
+    )
     print("[INFO] Results: {}".format(RESULTS_PATH))
 
 
