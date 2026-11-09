@@ -1,3 +1,4 @@
+import csv
 import logging
 import os
 import time
@@ -5,11 +6,60 @@ import torch
 import torch.nn as nn
 from utils.meter import AverageMeter
 from utils.metrics import R1_mAP_eval
-from utils.attention_maps import save_attention_batch
+from utils.attention_maps import get_attention_run_dir, save_attention_batch
 from torch.cuda import amp
 import torch.distributed as dist
 from torch.nn import functional as F
 from loss.supcontrast import SupConLoss
+from utils.checkpoint import (
+    make_stage2_checkpoint,
+    restore_rng_state,
+    save_checkpoint,
+)
+
+
+STAGE2_METRIC_FIELDS = (
+    "epoch",
+    "mAP_percent",
+    "rank1_percent",
+    "rank5_percent",
+    "stage2_epoch_training_seconds",
+    "stage2_cumulative_training_seconds",
+    "stage2_peak_gpu_memory_mb",
+)
+
+
+def append_stage2_epoch_metrics(
+    output_dir,
+    epoch,
+    mAP,
+    cmc,
+    epoch_training_seconds,
+    cumulative_training_seconds,
+    peak_gpu_memory_mb,
+):
+    metrics_path = os.path.join(output_dir, "stage2_epoch_metrics.csv")
+    file_exists = os.path.isfile(metrics_path) and os.path.getsize(metrics_path) > 0
+    with open(metrics_path, "a", newline="", encoding="utf-8") as metrics_file:
+        writer = csv.DictWriter(metrics_file, fieldnames=STAGE2_METRIC_FIELDS)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "epoch": epoch,
+                "mAP_percent": round(float(mAP) * 100, 4),
+                "rank1_percent": round(float(cmc[0]) * 100, 4),
+                "rank5_percent": round(float(cmc[4]) * 100, 4),
+                "stage2_epoch_training_seconds": round(
+                    epoch_training_seconds, 3
+                ),
+                "stage2_cumulative_training_seconds": round(
+                    cumulative_training_seconds, 3
+                ),
+                "stage2_peak_gpu_memory_mb": round(peak_gpu_memory_mb, 2),
+            }
+        )
+        metrics_file.flush()
 
 
 def _random_pool_i2t_logits(
@@ -61,16 +111,20 @@ def _random_k_i2t_logits(
     return logits, target_indices, candidate_ids
 
 
-def do_train_stage2(cfg,
-             model,
-             center_criterion,
-             train_loader_stage2,
-             val_loader,
-             optimizer,
-             optimizer_center,
-             scheduler,
-             loss_fn,
-             num_query, local_rank):
+def do_train_stage2(
+    cfg,
+    model,
+    center_criterion,
+    train_loader_stage2,
+    val_loader,
+    optimizer,
+    optimizer_center,
+    scheduler,
+    loss_fn,
+    num_query,
+    local_rank,
+    resume_state=None,
+):
     log_period = cfg.SOLVER.STAGE2.LOG_PERIOD
     checkpoint_period = cfg.SOLVER.STAGE2.CHECKPOINT_PERIOD
     eval_period = cfg.SOLVER.STAGE2.EVAL_PERIOD
@@ -90,7 +144,6 @@ def do_train_stage2(cfg,
             num_classes = model.module.num_classes
         else:
             num_classes = model.num_classes
-        torch.cuda.reset_peak_memory_stats(local_rank)
 
     loss_meter = AverageMeter()
     acc_meter = AverageMeter()
@@ -98,11 +151,30 @@ def do_train_stage2(cfg,
     evaluator = R1_mAP_eval(num_query, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM)
     scaler = amp.GradScaler()
     xent = SupConLoss(device)
+    start_epoch = 1
+    cumulative_training_seconds = 0.0
+    stage2_peak_memory_mb = 0.0
+    if resume_state is not None:
+        optimizer.load_state_dict(resume_state["optimizer"])
+        optimizer_center.load_state_dict(resume_state["optimizer_center"])
+        scheduler.load_state_dict(resume_state["scheduler"])
+        scaler.load_state_dict(resume_state["scaler"])
+        start_epoch = resume_state["epoch"] + 1
+        cumulative_training_seconds = resume_state["stage2_metrics"][
+            "cumulative_training_seconds"
+        ]
+        stage2_peak_memory_mb = resume_state["stage2_metrics"][
+            "peak_gpu_memory_mb"
+        ]
+        if start_epoch > epochs:
+            raise ValueError(
+                "Checkpoint completed epoch {}; set SOLVER.STAGE2.MAX_EPOCHS "
+                "to a value greater than {} to continue training.".format(
+                    resume_state["epoch"], resume_state["epoch"]
+                )
+            )
     
-    # train
-    import time
     from datetime import timedelta
-    all_start_time = time.monotonic()
 
     # train
     batch = cfg.SOLVER.STAGE2.IMS_PER_BATCH
@@ -122,7 +194,27 @@ def do_train_stage2(cfg,
             text_features.append(text_feature.cpu())
         text_features = torch.cat(text_features, 0).cuda()
 
-    for epoch in range(1, epochs + 1):
+    if resume_state is not None:
+        restore_rng_state(resume_state["rng_state"])
+
+    def save_stage2_state(epoch, checkpoint_path):
+        checkpoint = make_stage2_checkpoint(
+            epoch,
+            model,
+            center_criterion,
+            optimizer,
+            optimizer_center,
+            scheduler,
+            scaler,
+            {
+                "cumulative_training_seconds": cumulative_training_seconds,
+                "peak_gpu_memory_mb": stage2_peak_memory_mb,
+            },
+        )
+        save_checkpoint(checkpoint, checkpoint_path)
+        logger.info("Saved Stage 2 checkpoint to {}".format(checkpoint_path))
+
+    for epoch in range(start_epoch, epochs + 1):
         start_time = time.time()
         loss_meter.reset()
         acc_meter.reset()
@@ -130,6 +222,8 @@ def do_train_stage2(cfg,
 
         scheduler.step()
 
+        torch.cuda.reset_peak_memory_stats(local_rank)
+        training_epoch_start = time.perf_counter()
         model.train()
         for n_iter, (img, vid, target_cam, target_view) in enumerate(train_loader_stage2):
             optimizer.zero_grad()
@@ -199,6 +293,14 @@ def do_train_stage2(cfg,
                             .format(epoch, (n_iter + 1), len(train_loader_stage2),
                                     loss_meter.avg, acc_meter.avg, scheduler.get_lr()[0]))
 
+        torch.cuda.synchronize(local_rank)
+        epoch_training_seconds = time.perf_counter() - training_epoch_start
+        cumulative_training_seconds += epoch_training_seconds
+        epoch_peak_memory_mb = torch.cuda.max_memory_allocated(local_rank) / (
+            1024 ** 2
+        )
+        stage2_peak_memory_mb = max(stage2_peak_memory_mb, epoch_peak_memory_mb)
+
         end_time = time.time()
         time_per_batch = (end_time - start_time) / (n_iter + 1)
         if cfg.MODEL.DIST_TRAIN:
@@ -207,15 +309,7 @@ def do_train_stage2(cfg,
             logger.info("Epoch {} done. Time per batch: {:.3f}[s] Speed: {:.1f}[samples/s]"
                     .format(epoch, time_per_batch, train_loader_stage2.batch_size / time_per_batch))
 
-        if epoch % checkpoint_period == 0:
-            if cfg.MODEL.DIST_TRAIN:
-                if dist.get_rank() == 0:
-                    torch.save(model.state_dict(),
-                               os.path.join(cfg.OUTPUT_DIR, cfg.MODEL.NAME + '_{}.pth'.format(epoch)))
-            else:
-                torch.save(model.state_dict(),
-                           os.path.join(cfg.OUTPUT_DIR, cfg.MODEL.NAME + '_{}.pth'.format(epoch)))
-
+        epoch_metrics = None
         if epoch % eval_period == 0:
             if cfg.MODEL.DIST_TRAIN:
                 if dist.get_rank() == 0:
@@ -238,6 +332,7 @@ def do_train_stage2(cfg,
                     logger.info("mAP: {:.1%}".format(mAP))
                     for r in [1, 5, 10]:
                         logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
+                    epoch_metrics = (mAP, cmc)
                     torch.cuda.empty_cache()
             else:
                 model.eval()
@@ -259,14 +354,46 @@ def do_train_stage2(cfg,
                 logger.info("mAP: {:.1%}".format(mAP))
                 for r in [1, 5, 10]:
                     logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
+                epoch_metrics = (mAP, cmc)
                 torch.cuda.empty_cache()
 
-    all_end_time = time.monotonic()
-    total_time = timedelta(seconds=all_end_time - all_start_time)
-    logger.info("Total running time: {}".format(total_time))
+        if epoch_metrics is not None:
+            append_stage2_epoch_metrics(
+                cfg.OUTPUT_DIR,
+                epoch,
+                epoch_metrics[0],
+                epoch_metrics[1],
+                epoch_training_seconds,
+                cumulative_training_seconds,
+                stage2_peak_memory_mb,
+            )
+            logger.info(
+                "Saved Stage 2 epoch metrics to {}".format(
+                    os.path.join(cfg.OUTPUT_DIR, "stage2_epoch_metrics.csv")
+                )
+            )
+
+        if epoch % checkpoint_period == 0:
+            if not cfg.MODEL.DIST_TRAIN or dist.get_rank() == 0:
+                save_stage2_state(
+                    epoch,
+                    os.path.join(
+                        cfg.OUTPUT_DIR,
+                        cfg.MODEL.NAME + "_{}.pth".format(epoch),
+                    ),
+                )
+
+    if not cfg.MODEL.DIST_TRAIN or dist.get_rank() == 0:
+        save_stage2_state(
+            epochs,
+            os.path.join(cfg.OUTPUT_DIR, cfg.MODEL.NAME + "_final.pth"),
+        )
+
+    total_training_time = timedelta(seconds=cumulative_training_seconds)
+    logger.info("Stage2 training time: {}".format(total_training_time))
     logger.info(
         "Stage2 peak GPU memory allocated: {:.2f} MB".format(
-            torch.cuda.max_memory_allocated(local_rank) / (1024 ** 2)
+            stage2_peak_memory_mb
         )
     )
     print(cfg.OUTPUT_DIR)
@@ -280,11 +407,15 @@ def do_inference(cfg,
     logger = logging.getLogger("transreid.test")
     logger.info("Enter inferencing")
 
-    evaluator = R1_mAP_eval(num_query, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM)
-
-    evaluator.reset()
-
     attention_enabled = cfg.TEST.ATTENTION.ENABLED
+    attention_preview = attention_enabled and cfg.TEST.ATTENTION.NUM_IMAGES > 0
+    evaluator = None
+    if not attention_preview:
+        evaluator = R1_mAP_eval(
+            num_query, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM
+        )
+        evaluator.reset()
+
     if device:
         if torch.cuda.device_count() > 1 and not attention_enabled:
             print('Using {} GPUs for inference'.format(torch.cuda.device_count()))
@@ -299,6 +430,9 @@ def do_inference(cfg,
     image_encoder = inference_model.image_encoder
     if attention_enabled:
         image_encoder.set_attention_capture(True)
+        index_path = get_attention_run_dir(cfg, occlusion_ratio) / "index.jsonl"
+        if index_path.exists():
+            index_path.unlink()
 
     for n_iter, (img, pid, camid, camids, target_view, imgpath) in enumerate(val_loader):
         with torch.no_grad():
@@ -312,7 +446,8 @@ def do_inference(cfg,
             else: 
                 target_view = None
             feat = model(img, cam_label=camids, view_label=target_view)
-            evaluator.update((feat, pid, camid))
+            if evaluator is not None:
+                evaluator.update((feat, pid, camid))
             img_path_list.extend(imgpath)
             if attention_enabled:
                 attention_maps = image_encoder.get_attention_map()
@@ -324,6 +459,12 @@ def do_inference(cfg,
 
     if attention_enabled:
         image_encoder.set_attention_capture(False)
+
+    if attention_preview:
+        logger.info(
+            "Attention preview complete; retrieval metrics were not calculated."
+        )
+        return None
 
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     logger.info("Validation Results ")

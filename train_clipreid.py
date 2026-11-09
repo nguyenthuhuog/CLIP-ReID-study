@@ -7,6 +7,7 @@ from solver.lr_scheduler import WarmupMultiStepLR
 from loss.make_loss import make_loss
 from processor.processor_clipreid_stage1 import do_train_stage1
 from processor.processor_clipreid_stage2 import do_train_stage2
+from utils.checkpoint import load_stage2_checkpoint
 import random
 import torch
 import numpy as np
@@ -28,6 +29,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="ReID Baseline Training")
     parser.add_argument(
         "--config_file", default="configs/person/vit_clipreid.yml", help="path to config file", type=str
+    )
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help="resume Stage 2 from a version 2 checkpoint",
     )
 
     parser.add_argument("opts", help="Modify config options using the command-line", default=None,
@@ -69,18 +75,29 @@ if __name__ == '__main__':
 
     loss_func, center_criterion = make_loss(cfg, num_classes=num_classes)
 
-    optimizer_1stage = make_optimizer_1stage(cfg, model)
-    scheduler_1stage = create_scheduler(optimizer_1stage, num_epochs = cfg.SOLVER.STAGE1.MAX_EPOCHS, lr_min = cfg.SOLVER.STAGE1.LR_MIN, \
-                        warmup_lr_init = cfg.SOLVER.STAGE1.WARMUP_LR_INIT, warmup_t = cfg.SOLVER.STAGE1.WARMUP_EPOCHS, noise_range = None)
+    resume_state = None
+    if args.resume:
+        resume_state = load_stage2_checkpoint(args.resume)
+        model.load_state_dict(resume_state["model"])
+        center_criterion.load_state_dict(resume_state["center_criterion"])
+        logger.info(
+            "Resuming Stage 2 from epoch {} checkpoint {}".format(
+                resume_state["epoch"], args.resume
+            )
+        )
+    else:
+        optimizer_1stage = make_optimizer_1stage(cfg, model)
+        scheduler_1stage = create_scheduler(optimizer_1stage, num_epochs = cfg.SOLVER.STAGE1.MAX_EPOCHS, lr_min = cfg.SOLVER.STAGE1.LR_MIN, \
+                            warmup_lr_init = cfg.SOLVER.STAGE1.WARMUP_LR_INIT, warmup_t = cfg.SOLVER.STAGE1.WARMUP_EPOCHS, noise_range = None)
 
-    do_train_stage1(
-        cfg,
-        model,
-        train_loader_stage1,
-        optimizer_1stage,
-        scheduler_1stage,
-        args.local_rank
-    )
+        do_train_stage1(
+            cfg,
+            model,
+            train_loader_stage1,
+            optimizer_1stage,
+            scheduler_1stage,
+            args.local_rank
+        )
 
     optimizer_2stage, optimizer_center_2stage = make_optimizer_2stage(cfg, model, center_criterion)
     scheduler_2stage = WarmupMultiStepLR(optimizer_2stage, cfg.SOLVER.STAGE2.STEPS, cfg.SOLVER.STAGE2.GAMMA, cfg.SOLVER.STAGE2.WARMUP_FACTOR,
@@ -96,11 +113,6 @@ if __name__ == '__main__':
         optimizer_center_2stage,
         scheduler_2stage,
         loss_func,
-        num_query, args.local_rank
+        num_query, args.local_rank,
+        resume_state=resume_state,
     )
-
-    final_checkpoint = os.path.join(
-        cfg.OUTPUT_DIR, cfg.MODEL.NAME + "_final.pth"
-    )
-    torch.save(model.state_dict(), final_checkpoint)
-    logger.info("Saved final model checkpoint to {}".format(final_checkpoint))

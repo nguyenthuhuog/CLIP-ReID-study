@@ -55,6 +55,18 @@ then run
 CUDA_VISIBLE_DEVICES=0 python train_clipreid.py --config_file configs/person/vit_clipreid.yml
 ```
 
+Stage 2 can be resumed from a version 2 checkpoint saved at an epoch boundary. Set
+`SOLVER.STAGE2.MAX_EPOCHS` to the desired total epoch count (greater than the
+checkpoint's completed epoch), then run:
+
+```
+CUDA_VISIBLE_DEVICES=0 python train_clipreid.py --config_file configs/person/vit_clipreid.yml --resume your_output_dir/ViT-B-16_final.pth SOLVER.STAGE2.MAX_EPOCHS 80
+```
+
+Resuming skips Stage 1 and restores the Stage 2 model, optimizers, scheduler,
+AMP scaler, and random-number-generator states. Legacy model-only checkpoints
+remain supported for evaluation, but cannot resume training.
+
 if you want to run ViT-based CLIP-ReID+SIE+OLP for MSMT17, run:
 
 ```
@@ -78,6 +90,14 @@ python create_attention_overlays.py --config_file configs/person/vit_clipreid.ym
 ```
 
 Set `--ratio` to a condition that was tested. The script persists progress beside the maps and stops after all ten parts have been processed. `TEST.ATTENTION.MAP_DIR`, `TEST.ATTENTION.MAP_SIZE`, and `TEST.ATTENTION.OVERLAY_ALPHA` control the output directory, grayscale map resolution, and overlay strength.
+
+To compare the model variants on the same small sample, run:
+
+```
+python generate_attention_results.py
+```
+
+By default, this tests the same 10 query/gallery images for each available checkpoint, without patch occlusion. Shared originals and each variant's overlays are written under `results/attention_overlays/comparisons/`. Use `--cases` to choose variants or `--num-images` to change the sample size.
 
 ### Acknowledgement
 

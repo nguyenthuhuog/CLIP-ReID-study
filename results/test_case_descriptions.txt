@@ -1,0 +1,69 @@
+MO TA CAC TEST CASE TRONG run_all.py
+
+Moi test case danh gia mo hinh truy hoi nguoi (person re-identification) tren mot dieu kien che khuat. Cac chi so duoc ghi gom mAP, Rank-1 va Rank-5.
+
+1. CNN - baseline
+   TC01 - Khong che khuat (0%): Danh gia CNN voi phuong phap baseline tren anh kiem tra goc.
+   TC02 - Che khuat ngau nhien 20%: Danh gia do chinh xac cua CNN khi mot phan nho anh bi che.
+   TC03 - Che khuat ngau nhien 40%: Danh gia kha nang nhan dang cua CNN voi muc che khuat trung binh.
+   TC04 - Che khuat ngau nhien 60%: Do kha nang truy hoi cua CNN khi phan lon anh bi che.
+   TC05 - Che khuat ngau nhien 80%: Kiem tra kha nang duy tri hieu nang cua CNN trong dieu kien che khuat nang.
+
+2. CNN - random_k
+   TC06 - Khong che khuat (0%): Danh gia CNN huan luyen voi random_k tren anh kiem tra goc.
+   TC07 - Che khuat ngau nhien 20%: Do hieu nang random_k cua CNN khi anh bi che 20%.
+   TC08 - Che khuat ngau nhien 40%: Do hieu nang random_k cua CNN khi anh bi che 40%.
+   TC09 - Che khuat ngau nhien 60%: Do hieu nang random_k cua CNN khi anh bi che 60%.
+   TC10 - Che khuat ngau nhien 80%: Do hieu nang random_k cua CNN khi anh bi che 80%.
+
+3. CNN - top_k
+   TC11 - Khong che khuat (0%): Danh gia CNN huan luyen voi top_k tren anh kiem tra goc.
+   TC12 - Che khuat ngau nhien 20%: Do hieu nang top_k cua CNN khi anh bi che 20%.
+   TC13 - Che khuat ngau nhien 40%: Do hieu nang top_k cua CNN khi anh bi che 40%.
+   TC14 - Che khuat ngau nhien 60%: Do hieu nang top_k cua CNN khi anh bi che 60%.
+   TC15 - Che khuat ngau nhien 80%: Do hieu nang top_k cua CNN khi anh bi che 80%.
+
+4. CNN - top_k_random_pool
+   TC16 - Khong che khuat (0%): Danh gia CNN huan luyen voi top_k_random_pool tren anh kiem tra goc.
+   TC17 - Che khuat ngau nhien 20%: Do hieu nang top_k_random_pool cua CNN khi anh bi che 20%.
+   TC18 - Che khuat ngau nhien 40%: Do hieu nang top_k_random_pool cua CNN khi anh bi che 40%.
+   TC19 - Che khuat ngau nhien 60%: Do hieu nang top_k_random_pool cua CNN khi anh bi che 60%.
+   TC20 - Che khuat ngau nhien 80%: Do hieu nang top_k_random_pool cua CNN khi anh bi che 80%.
+
+5. ViT - baseline
+   TC21 - Khong che khuat (0%): Danh gia ViT voi phuong phap baseline tren anh kiem tra goc.
+   TC22 - Che khuat ngau nhien 20%: Danh gia do chinh xac cua ViT khi mot phan nho anh bi che.
+   TC23 - Che khuat ngau nhien 40%: Danh gia kha nang nhan dang cua ViT voi muc che khuat trung binh.
+   TC24 - Che khuat ngau nhien 60%: Do kha nang truy hoi cua ViT khi phan lon anh bi che.
+   TC25 - Che khuat ngau nhien 80%: Kiem tra kha nang duy tri hieu nang cua ViT trong dieu kien che khuat nang.
+
+6. ViT - random_k
+   TC26 - Khong che khuat (0%): Danh gia ViT huan luyen voi random_k tren anh kiem tra goc.
+   TC27 - Che khuat ngau nhien 20%: Do hieu nang random_k cua ViT khi anh bi che 20%.
+   TC28 - Che khuat ngau nhien 40%: Do hieu nang random_k cua ViT khi anh bi che 40%.
+   TC29 - Che khuat ngau nhien 60%: Do hieu nang random_k cua ViT khi anh bi che 60%.
+   TC30 - Che khuat ngau nhien 80%: Do hieu nang random_k cua ViT khi anh bi che 80%.
+
+7. ViT - top_k
+   TC31 - Khong che khuat (0%): Danh gia ViT huan luyen voi top_k tren anh kiem tra goc.
+   TC32 - Che khuat ngau nhien 20%: Do hieu nang top_k cua ViT khi anh bi che 20%.
+   TC33 - Che khuat ngau nhien 40%: Do hieu nang top_k cua ViT khi anh bi che 40%.
+   TC34 - Che khuat ngau nhien 60%: Do hieu nang top_k cua ViT khi anh bi che 60%.
+   TC35 - Che khuat ngau nhien 80%: Do hieu nang top_k cua ViT khi anh bi che 80%.
+
+8. ViT - top_k_random_pool
+   TC36 - Khong che khuat (0%): Danh gia ViT huan luyen voi top_k_random_pool tren anh kiem tra goc.
+   TC37 - Che khuat ngau nhien 20%: Do hieu nang top_k_random_pool cua ViT khi anh bi che 20%.
+   TC38 - Che khuat ngau nhien 40%: Do hieu nang top_k_random_pool cua ViT khi anh bi che 40%.
+   TC39 - Che khuat ngau nhien 60%: Do hieu nang top_k_random_pool cua ViT khi anh bi che 60%.
+   TC40 - Che khuat ngau nhien 80%: Do hieu nang top_k_random_pool cua ViT khi anh bi che 80%.
+
+GIAI THICH THUAT NGU
+
+- I2T (Image-to-Text): Thanh phan loss so sanh dac trung anh voi dac trung van ban cua cac lop/danh tinh.
+- K: So luong lop am (lop khong phai nhan dung) duoc dua vao tinh loss; lop dung van duoc giu lai lam lop duong.
+- random_k: Voi moi mau, lay ngau nhien K lop am de so sanh voi lop dung. Trong cau hinh mac dinh, K = 64 (hoac giam neu so lop am it hon).
+- top_k: Chon K lop am co diem cao nhat de mo hinh tap trung phan biet cac lop am kho; cau hinh mac dinh K = 64. O thi nghiem top_k rieng, viec chon loc xet tren cac lop; o top_k_random_pool, top K duoc chon trong pool ngau nhien da lay.
+- random_pool: Lay ngau nhien toi da 256 lop am lam pool ung vien chung cho batch (bo qua cac lop duong cua batch), sau do tinh loss tren cac ung vien nay va lop duong.
+- top_k_random_pool: Bat dong thoi top_k va random_pool; code runner bat top_k va random_pool, tat random_k. top_k_random_pool la ten nhom thi nghiem, khong phai mot lua chon K-doc lap.
+- baseline: Khong bat top_k, random_k hoac random_pool; loss Image-to-Text tinh tren toan bo cac lop.

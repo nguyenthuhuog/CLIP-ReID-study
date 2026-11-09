@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from utils.checkpoint import extract_model_state_dict
 from .clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
 _tokenizer = _Tokenizer()
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
@@ -154,13 +155,17 @@ class build_transformer(nn.Module):
 
 
     def load_param(self, trained_path):
-        param_dict = torch.load(trained_path)
+        param_dict = extract_model_state_dict(
+            torch.load(trained_path, map_location="cpu", weights_only=True)
+        )
         for i in param_dict:
             self.state_dict()[i.replace('module.', '')].copy_(param_dict[i])
         print('Loading pretrained model from {}'.format(trained_path))
 
     def load_param_finetune(self, model_path):
-        param_dict = torch.load(model_path)
+        param_dict = extract_model_state_dict(
+            torch.load(model_path, map_location="cpu", weights_only=True)
+        )
         for i in param_dict:
             self.state_dict()[i].copy_(param_dict[i])
         print('Loading pretrained model for finetuning from {}'.format(model_path))
@@ -236,4 +241,3 @@ class PromptLearner(nn.Module):
         ) 
 
         return prompts 
-
