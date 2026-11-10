@@ -16,6 +16,7 @@ dependencies = [
     "tqdm",
     "ftfy",
     "regex",
+    "grad-cam>=1.5.0,<2",
 ]
 
 [tool.uv.sources]

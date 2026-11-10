@@ -1,0 +1,3 @@
+run_id,experiment_name,model,method,top_k,epoch,mAP_percent,rank1_percent,rank5_percent,stage2_epoch_training_seconds,stage2_cumulative_training_seconds,stage2_peak_gpu_memory_mb,checkpoint
+20261110_095750_8524,vit_baseline,vit,baseline,,1,30.332,53.0285,73.7233,1145.634,1145.634,1778.93,outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+20261110_095750_8524,vit_baseline,vit,baseline,,2,45.9341,68.171,84.5903,1022.608,2168.241,1778.93,outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth

@@ -63,20 +63,39 @@ def create_original_overlays(condition_dir, comparison_root, case_name, alpha):
     overlays_dir.mkdir(parents=True, exist_ok=True)
     for key, record in records.items():
         original_path = condition_dir / record["original"]
+        overlay_source = record.get("patched") or record.get("input")
+        if not overlay_source:
+            raise KeyError(
+                "Attention record is missing both 'patched' and 'input': "
+                "{}".format(key)
+            )
+        overlay_source_path = condition_dir / overlay_source
         attention_path = condition_dir / record["attention"]
         if not original_path.is_file():
             raise FileNotFoundError("Original image not found: {}".format(original_path))
+        if not overlay_source_path.is_file():
+            raise FileNotFoundError(
+                "Patched/model-input image not found: {}".format(
+                    overlay_source_path
+                )
+            )
         if not attention_path.is_file():
             raise FileNotFoundError("Attention map not found: {}".format(attention_path))
 
         with Image.open(original_path) as source_file:
             original = source_file.convert("RGB")
-        with Image.open(attention_path) as map_file:
-            attention = map_file.convert("L").resize(
+        with Image.open(overlay_source_path) as patched_file:
+            patched = patched_file.convert("RGB")
+        if patched.size != original.size:
+            patched = patched.resize(
                 original.size, Image.Resampling.BILINEAR
             )
+        with Image.open(attention_path) as map_file:
+            attention = map_file.convert("L").resize(
+                patched.size, Image.Resampling.BILINEAR
+            )
         original.save(originals_dir / (key + ".png"), format="PNG")
-        colorize_attention_overlay(original, attention, alpha).save(
+        colorize_attention_overlay(patched, attention, alpha).save(
             overlays_dir / (key + "_attention.png"), format="PNG"
         )
 

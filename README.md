@@ -81,7 +81,7 @@ For example, if you want to test ViT-based CLIP-ReID for MSMT17
 CUDA_VISIBLE_DEVICES=0 python test_clipreid.py --config_file configs/person/vit_clipreid.yml TEST.WEIGHT 'your_trained_checkpoints_path/ViT-B-16_60.pth'
 ```
 
-With `TEST.ATTENTION.ENABLED: True`, evaluation saves each image's final-layer visual attention as an 8-bit grayscale PNG under `datasets/attention_maps/<dataset>/<model>/<checkpoint>/occlusion_<percent>/maps/`. When occlusion testing is enabled, the corresponding original, patched input, and patch/attention overlay are also saved in that condition's folder. The CNN model uses its visual attention-pooling weights; ViT uses the final block's CLS-to-patch attention.
+With `TEST.ATTENTION.ENABLED: True`, evaluation saves Grad-CAM maps as 8-bit grayscale PNGs under `datasets/attention_maps/<dataset>/<model>/<checkpoint>/occlusion_<percent>/maps/`. By default, only the first 10 images are captured; set `TEST.ATTENTION.NUM_IMAGES` to `0` to capture the full test set. Grad-CAM targets the predicted identity logit (the sum of the two ReID classifier-head logits), using the final CNN residual block or final ViT transformer block. When occlusion testing is enabled, overlays use the patched model input with the Grad-CAM heatmap; the original image is saved separately.
 
 After testing, create the next random, non-repeating tenth of original-image overlays with:
 
@@ -98,6 +98,14 @@ python generate_attention_results.py
 ```
 
 By default, this tests the same 10 query/gallery images for each available checkpoint, without patch occlusion. Shared originals and each variant's overlays are written under `results/attention_overlays/comparisons/`. Use `--cases` to choose variants or `--num-images` to change the sample size.
+
+To evaluate every CNN `*_final.pth` checkpoint in a selected output run on the full test set at 0%, 10%, 20%, 30%, and 50% occlusion, while saving overlays for only the same 10 images, run:
+
+```
+python test_single.py --run-id 20261109_160949_28516
+```
+
+The script discovers checkpoints in `cnn_*/*_final.pth` case folders in that run, so this run tests `cnn_baseline`, `cnn_top_k_8`, and `cnn_top_k_16`. If `--run-id` is omitted, it selects the newest output run with matching checkpoints. ViT is available as an opt-in via `--model vit`; it is not run by default. Metrics are saved to `metrics.csv` and the shared originals/model attention overlays are under the run's `comparisons/` directory.
 
 ### Acknowledgement
 

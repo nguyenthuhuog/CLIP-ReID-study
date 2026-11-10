@@ -95,56 +95,7 @@ def make_dataloader(cfg):
         print('unsupported sampler! expected softmax or triplet but got {}'.format(cfg.SAMPLER))
 
     num_query = len(dataset.query)
-    attention_image_limit = (
-        cfg.TEST.ATTENTION.NUM_IMAGES if cfg.TEST.ATTENTION.ENABLED else 0
-    )
-    if attention_image_limit < 0:
-        raise ValueError("TEST.ATTENTION.NUM_IMAGES must not be negative.")
-    if attention_image_limit:
-        if attention_image_limit < 2:
-            raise ValueError(
-                "TEST.ATTENTION.NUM_IMAGES must be at least 2 to include "
-                "query and gallery images."
-            )
-        if attention_image_limit > num_query + len(dataset.gallery):
-            raise ValueError(
-                "TEST.ATTENTION.NUM_IMAGES exceeds the available test images."
-            )
-
-        num_query = min(num_query, attention_image_limit // 2)
-        num_gallery = min(
-            len(dataset.gallery), attention_image_limit - num_query
-        )
-        remaining_images = attention_image_limit - num_query - num_gallery
-        additional_query = min(
-            len(dataset.query) - num_query, remaining_images
-        )
-        num_query += additional_query
-        remaining_images -= additional_query
-        num_gallery += min(
-            len(dataset.gallery) - num_gallery, remaining_images
-        )
-        if num_query == 0 or num_gallery == 0:
-            raise ValueError(
-                "The attention preview requires at least one query and one "
-                "gallery image."
-            )
-        if num_query + num_gallery != attention_image_limit:
-            raise ValueError(
-                "Could not select the requested number of query and gallery images."
-            )
-        test_data = (
-            dataset.query[:num_query] + dataset.gallery[:num_gallery]
-        )
-        print(
-            "Using {} fixed attention-preview images ({} query, {} gallery).".format(
-                len(test_data), num_query, num_gallery
-            )
-        )
-    else:
-        test_data = dataset.query + dataset.gallery
-
-    val_set = ImageDataset(test_data, val_transforms)
+    val_set = ImageDataset(dataset.query + dataset.gallery, val_transforms)
 
     val_loader = DataLoader(
         val_set, batch_size=cfg.TEST.IMS_PER_BATCH, shuffle=False, num_workers=num_workers,
@@ -154,12 +105,4 @@ def make_dataloader(cfg):
         train_set_normal, batch_size=cfg.SOLVER.STAGE1.IMS_PER_BATCH, shuffle=True, num_workers=num_workers,
         collate_fn=train_collate_fn
     )
-    return (
-        train_loader_stage2,
-        train_loader_stage1,
-        val_loader,
-        num_query,
-        num_classes,
-        cam_num,
-        view_num,
-    )
+    return train_loader_stage2, train_loader_stage1, val_loader, num_query, num_classes, cam_num, view_num

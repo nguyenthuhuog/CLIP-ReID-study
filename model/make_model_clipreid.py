@@ -105,7 +105,7 @@ class build_transformer(nn.Module):
         self.prompt_learner = PromptLearner(num_classes, dataset_name, clip_model.dtype, clip_model.token_embedding)
         self.text_encoder = TextEncoder(clip_model)
 
-    def forward(self, x = None, label=None, get_image = False, get_text = False, cam_label= None, view_label=None):
+    def forward(self, x = None, label=None, get_image = False, get_text = False, cam_label= None, view_label=None, get_cam_logits=False):
         if get_text == True:
             prompts = self.prompt_learner(label) 
             text_features = self.text_encoder(prompts, self.prompt_learner.tokenized_prompts)
@@ -140,6 +140,9 @@ class build_transformer(nn.Module):
 
         feat = self.bottleneck(img_feature) 
         feat_proj = self.bottleneck_proj(img_feature_proj) 
+
+        if get_cam_logits:
+            return self.classifier(feat) + self.classifier_proj(feat_proj)
         
         if self.training:
             cls_score = self.classifier(feat)

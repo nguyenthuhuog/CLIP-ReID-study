@@ -247,7 +247,7 @@ _C.TEST.ATTENTION.ENABLED = False
 _C.TEST.ATTENTION.MAP_DIR = "./datasets/attention_maps"
 _C.TEST.ATTENTION.MAP_SIZE = [16, 8]
 _C.TEST.ATTENTION.OVERLAY_ALPHA = 0.45
-_C.TEST.ATTENTION.NUM_IMAGES = 0
+_C.TEST.ATTENTION.NUM_IMAGES = 10
 # ---------------------------------------------------------------------------- #
 # Misc options
 # ---------------------------------------------------------------------------- #

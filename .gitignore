@@ -28,4 +28,8 @@ datasets/data
 model/output
 logs
 outputs
-results/attention_overlays
+
+# Data
+*.jpg
+*.png
+*.jsonl

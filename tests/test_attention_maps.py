@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from PIL import Image
 
 from create_attention_overlays import create_next_overlay_part
+from generate_attention_results import create_original_overlays
 from utils.attention_maps import get_attention_run_dir, save_attention_batch
 
 try:
@@ -17,6 +18,50 @@ except ImportError:
 
 
 class AttentionMapTest(unittest.TestCase):
+    def test_comparison_overlay_uses_patched_input_and_attention_map(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            condition_dir = root / "occlusion_020"
+            original_dir = condition_dir / "originals"
+            patched_dir = condition_dir / "patched"
+            maps_dir = condition_dir / "maps"
+            for directory in (original_dir, patched_dir, maps_dir):
+                directory.mkdir(parents=True)
+
+            original_path = original_dir / "image.png"
+            patched_path = patched_dir / "image.png"
+            attention_path = maps_dir / "image.png"
+            Image.new("RGB", (8, 8), (0, 0, 255)).save(original_path)
+            patched = Image.new("RGB", (8, 8), (0, 255, 0))
+            for y in range(8):
+                for x in range(4):
+                    patched.putpixel((x, y), (0, 0, 0))
+            patched.save(patched_path)
+            Image.new("L", (2, 2), 255).save(attention_path)
+            (condition_dir / "index.jsonl").write_text(
+                json.dumps(
+                    {
+                        "key": "image",
+                        "original": "originals/image.png",
+                        "patched": "patched/image.png",
+                        "attention": "maps/image.png",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            count, output_dir = create_original_overlays(
+                condition_dir, root / "comparisons", "cnn_top_k_8", 0.5
+            )
+
+            self.assertEqual(count, 1)
+            with Image.open(root / "comparisons" / "originals" / "image.png") as image:
+                self.assertEqual(image.getpixel((1, 1)), (0, 0, 255))
+            with Image.open(output_dir / "image_attention.png") as image:
+                self.assertEqual(image.getpixel((1, 1)), (127, 20, 0))
+                self.assertEqual(image.getpixel((6, 1)), (127, 147, 0))
+
     @unittest.skipIf(torch is None, "PyTorch is required for model attention tests.")
     def test_vit_returns_final_cls_to_patch_attention(self):
         vision = VisionTransformer(

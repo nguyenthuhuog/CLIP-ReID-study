@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 RESULTS_PATH = ROOT / "results" / "cnn_stage2_epoch_metrics.csv"
+VIT_RESULTS_PATH = ROOT / "results" / "vit_stage2_epoch_metrics.csv"
 RESULT_FIELDS = (
     "run_id",
     "experiment_name",
@@ -36,27 +37,34 @@ BASELINE_OPTS = (
 )
 
 CNN_CONFIG = "configs/person/cnn_clipreid.yml"
+VIT_CONFIG = "configs/person/vit_clipreid.yml"
 TOP_K_VALUES = (8, 16)
-EXPERIMENTS = (
-    ("cnn", CNN_CONFIG, "baseline", None, BASELINE_OPTS),
-) + tuple(
-    (
-        "cnn",
-        CNN_CONFIG,
-        "top_k",
-        k,
-        (
-            "I2T_TOPK.ENABLED",
-            "True",
-            "I2T_RANDOM_POOL.ENABLED",
-            "False",
-            "I2T_RANDOM_K.ENABLED",
-            "False",
-            "I2T_TOPK.NUMBER_K",
-            str(k),
-        ),
+# MODELS = (("cnn", CNN_CONFIG), ("vit", VIT_CONFIG))
+MODELS = (("vit", VIT_CONFIG),)
+
+EXPERIMENTS = tuple(
+    (model_name, config_path, method_name, top_k, method_opts)
+    for model_name, config_path in MODELS
+    for method_name, top_k, method_opts in (
+        ("baseline", None, BASELINE_OPTS),
     )
-    for k in TOP_K_VALUES
+    + tuple(
+        (
+            "top_k",
+            k,
+            (
+                "I2T_TOPK.ENABLED",
+                "True",
+                "I2T_RANDOM_POOL.ENABLED",
+                "False",
+                "I2T_RANDOM_K.ENABLED",
+                "False",
+                "I2T_TOPK.NUMBER_K",
+                str(k),
+            ),
+        )
+        for k in TOP_K_VALUES
+    )
 )
 
 
@@ -122,22 +130,22 @@ def read_stage2_epoch_metrics(metrics_path):
     return rows
 
 
-def append_results(rows):
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_exists = RESULTS_PATH.exists()
-    if file_exists and RESULTS_PATH.stat().st_size:
-        with RESULTS_PATH.open("r", newline="", encoding="utf-8") as result_file:
+def append_results(rows, results_path):
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = results_path.exists()
+    if file_exists and results_path.stat().st_size:
+        with results_path.open("r", newline="", encoding="utf-8") as result_file:
             existing_fields = next(csv.reader(result_file), [])
         if existing_fields != list(RESULT_FIELDS):
             raise RuntimeError(
                 "Existing results file has a different schema: {}".format(
-                    RESULTS_PATH
+                    results_path
                 )
             )
 
-    with RESULTS_PATH.open("a", newline="", encoding="utf-8") as result_file:
+    with results_path.open("a", newline="", encoding="utf-8") as result_file:
         writer = csv.DictWriter(result_file, fieldnames=RESULT_FIELDS)
-        if not file_exists or RESULTS_PATH.stat().st_size == 0:
+        if not file_exists or results_path.stat().st_size == 0:
             writer.writeheader()
         writer.writerows(rows)
         result_file.flush()
@@ -167,7 +175,12 @@ def main():
         case_output = output_root / case_name
         case_output.mkdir(parents=True, exist_ok=False)
         train_log = logs_root / (case_name + "_train.log")
-        generated_checkpoint = case_output / "RN50_final.pth"
+        checkpoint_name = (
+            "RN50_final.pth"
+            if model_name == "cnn"
+            else "ViT-B-16_final.pth"
+        )
+        generated_checkpoint = case_output / checkpoint_name
         checkpoint = case_output / (case_name + "_final.pth")
 
         print(
@@ -217,19 +230,21 @@ def main():
             }
             for result in epoch_metrics
         ]
-        append_results(rows)
+        results_path = RESULTS_PATH if model_name == "cnn" else VIT_RESULTS_PATH
+        append_results(rows, results_path)
         print(
             "[INFO] Appended {} Stage 2 epoch results for {} to {}".format(
-                len(rows), case_name, RESULTS_PATH
+                len(rows), case_name, results_path
             )
         )
 
     print(
-        "[INFO] All {} CNN training cases completed sequentially.".format(
+        "[INFO] All {} training cases completed sequentially.".format(
             len(EXPERIMENTS)
         )
     )
     print("[INFO] Results: {}".format(RESULTS_PATH))
+    print("[INFO] Results: {}".format(VIT_RESULTS_PATH))
 
 
 if __name__ == "__main__":

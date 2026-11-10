@@ -7,6 +7,7 @@ import torch.nn as nn
 from utils.meter import AverageMeter
 from utils.metrics import R1_mAP_eval
 from utils.attention_maps import get_attention_run_dir, save_attention_batch
+from utils.grad_cam import compute_reid_grad_cam, create_reid_grad_cam
 from torch.cuda import amp
 import torch.distributed as dist
 from torch.nn import functional as F
@@ -408,13 +409,14 @@ def do_inference(cfg,
     logger.info("Enter inferencing")
 
     attention_enabled = cfg.TEST.ATTENTION.ENABLED
-    attention_preview = attention_enabled and cfg.TEST.ATTENTION.NUM_IMAGES > 0
-    evaluator = None
-    if not attention_preview:
-        evaluator = R1_mAP_eval(
-            num_query, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM
-        )
-        evaluator.reset()
+    attention_image_limit = int(cfg.TEST.ATTENTION.NUM_IMAGES)
+    if attention_image_limit < 0:
+        raise ValueError("TEST.ATTENTION.NUM_IMAGES must not be negative.")
+    remaining_attention_images = attention_image_limit or None
+    evaluator = R1_mAP_eval(
+        num_query, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM
+    )
+    evaluator.reset()
 
     if device:
         if torch.cuda.device_count() > 1 and not attention_enabled:
@@ -426,10 +428,7 @@ def do_inference(cfg,
 
     model.eval()
     img_path_list = []
-    inference_model = model.module if isinstance(model, nn.DataParallel) else model
-    image_encoder = inference_model.image_encoder
     if attention_enabled:
-        image_encoder.set_attention_capture(True)
         index_path = get_attention_run_dir(cfg, occlusion_ratio) / "index.jsonl"
         if index_path.exists():
             index_path.unlink()
@@ -446,25 +445,35 @@ def do_inference(cfg,
             else: 
                 target_view = None
             feat = model(img, cam_label=camids, view_label=target_view)
-            if evaluator is not None:
-                evaluator.update((feat, pid, camid))
+            evaluator.update((feat, pid, camid))
             img_path_list.extend(imgpath)
-            if attention_enabled:
-                attention_maps = image_encoder.get_attention_map()
-                if attention_maps is None:
-                    raise RuntimeError("The image encoder did not produce an attention map.")
-                save_attention_batch(
-                    cfg, imgpath, img, attention_maps, occlusion_ratio
-                )
-
-    if attention_enabled:
-        image_encoder.set_attention_capture(False)
-
-    if attention_preview:
-        logger.info(
-            "Attention preview complete; retrieval metrics were not calculated."
-        )
-        return None
+        if attention_enabled and remaining_attention_images != 0:
+            capture_count = (
+                len(imgpath)
+                if remaining_attention_images is None
+                else min(len(imgpath), remaining_attention_images)
+            )
+            cam_labels = camids[:capture_count] if camids is not None else None
+            view_labels = (
+                target_view[:capture_count] if target_view is not None else None
+            )
+            cam = create_reid_grad_cam(model, cam_labels, view_labels)
+            try:
+                with torch.enable_grad():
+                    attention_maps = compute_reid_grad_cam(
+                        cam, img[:capture_count]
+                    )
+            finally:
+                cam.activations_and_grads.release()
+            save_attention_batch(
+                cfg,
+                imgpath[:capture_count],
+                img[:capture_count],
+                attention_maps,
+                occlusion_ratio,
+            )
+            if remaining_attention_images is not None:
+                remaining_attention_images -= capture_count
 
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     logger.info("Validation Results ")
