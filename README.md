@@ -107,6 +107,14 @@ python test_single.py --run-id 20261109_160949_28516
 
 The script discovers checkpoints in `cnn_*/*_final.pth` case folders in that run, so this run tests `cnn_baseline`, `cnn_top_k_8`, and `cnn_top_k_16`. If `--run-id` is omitted, it selects the newest output run with matching checkpoints. ViT is available as an opt-in via `--model vit`; it is not run by default. Metrics are saved to `metrics.csv` and the shared originals/model attention overlays are under the run's `comparisons/` directory.
 
+Create a separate comparison table for each of the 10 original images. Each table has columns for the original, baseline, Top-K-8, and Top-K-16, and rows for the five occlusion ratios:
+
+```
+python create_comparison_grid.py
+```
+
+By default, it reads `results/test_single/cnn_20261109_160949_28516_20261110_125249/comparisons/` and writes the 10 per-image tables under its `per_image/` folder. Use `--comparison-dir` to select another result folder.
+
 ### Acknowledgement
 
 Codebase from [TransReID](https://github.com/damo-cv/TransReID), [CLIP](https://github.com/openai/CLIP), and [CoOp](https://github.com/KaiyangZhou/CoOp).

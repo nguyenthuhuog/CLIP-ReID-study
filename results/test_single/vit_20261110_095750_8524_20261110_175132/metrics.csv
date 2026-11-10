@@ -1,0 +1,16 @@
+model,variant,mode,occlusion_ratio_percent,mAP_percent,rank1_percent,rank5_percent,checkpoint
+vit,baseline,baseline,0.0,45.9,68.2,84.6,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+vit,baseline,random_patch,10.0,25.4,44.3,66.9,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+vit,baseline,random_patch,20.0,14.5,27.6,49.7,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+vit,baseline,random_patch,30.0,8.5,17.8,36.5,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+vit,baseline,random_patch,50.0,3.2,7.3,17.1,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_baseline\vit_baseline_final.pth
+vit,top_k_8,baseline,0.0,37.6,61.0,78.6,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_8\vit_top_k_8_final.pth
+vit,top_k_8,random_patch,10.0,20.8,38.4,60.9,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_8\vit_top_k_8_final.pth
+vit,top_k_8,random_patch,20.0,11.1,22.3,43.6,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_8\vit_top_k_8_final.pth
+vit,top_k_8,random_patch,30.0,6.3,12.9,30.5,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_8\vit_top_k_8_final.pth
+vit,top_k_8,random_patch,50.0,2.6,5.3,15.7,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_8\vit_top_k_8_final.pth
+vit,top_k_16,baseline,0.0,43.0,65.7,83.5,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_16\vit_top_k_16_final.pth
+vit,top_k_16,random_patch,10.0,22.9,41.8,63.7,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_16\vit_top_k_16_final.pth
+vit,top_k_16,random_patch,20.0,13.2,26.3,47.9,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_16\vit_top_k_16_final.pth
+vit,top_k_16,random_patch,30.0,7.9,16.7,35.1,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_16\vit_top_k_16_final.pth
+vit,top_k_16,random_patch,50.0,3.2,6.9,18.0,E:\Projects\MultiDB\CLIP-ReID\outputs\20261110_095750_8524\vit_top_k_16\vit_top_k_16_final.pth
